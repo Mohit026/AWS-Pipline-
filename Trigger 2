@@ -1,0 +1,197 @@
+import boto3
+import psycopg2
+
+def lambda_handler(event, context):
+    # Extract S3 bucket and key information from the event
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    object_key = event['Records'][0]['s3']['object']['key']
+    
+    # Connect to Amazon Redshift
+    try:
+        conn = psycopg2.connect(
+            dbname='dev',
+            host='redshift-cluster-1.csqt5igk4tcp.ap-south-1.redshift.amazonaws.com',
+            port='5439',
+            user='awsuser',
+            password='Rohit1234'
+        )
+        
+        # Execute SQL queries
+        cursor = conn.cursor()
+        create_table_query = '''
+            CREATE TABLE IF NOT EXISTS crime_scene_report (
+                date DATE,
+                type VARCHAR,
+                description VARCHAR,
+                city VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS interview(
+                person_id INT,
+                transcipt VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS get_fit_now_check_in(
+                membership_id VARCHAR,
+                check_in_date DATE,
+                check_in_time VARCHAR,
+                check_out_time VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS get_fit_now_member(
+                id VARCHAR,
+                person_id INT,
+                name VARCHAR,
+                membership_start_date DATE,
+                membership_status VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS facebook_event_checkin(
+                person_id INT,
+                event_id INT,
+                event_NAME VARCHAR,
+                date DATE
+            );
+            CREATE TABLE IF NOT EXISTS person(
+                id INT,
+                name VARCHAR,
+                license_id INT,
+                address_number INT,
+                address_street_name VARCHAR,
+                ssn VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS solution(
+                usr VARCHAR,
+                value VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS drivers_license(
+                id INT,
+                age INT,
+                height INT,
+                eye_colour VARCHAR,
+                hair_colour VARCHAR,
+                gender VARCHAR,
+                plate_number VARCHAR,
+                car_make VARCHAR,
+                car_model VARCHAR
+            );
+            CREATE TABLE IF NOT EXISTS income(
+                ssn VARCHAR,
+                annual_income INT
+            );
+            
+        '''
+        cursor.execute(create_table_query)
+        print("Table created")
+        def get_file_names(bucket_name, folder_path):
+            s3 = boto3.client('s3')
+        
+            # List objects in the specified bucket and folder
+            response = s3.list_objects_v2(
+                Bucket=bucket_name,
+                Prefix=folder_path
+            )
+        
+            # Extract file names from the response
+            file_names = [obj['Key'] for obj in response.get('Contents', [])]
+
+            return file_names
+        # Load data from S3 into Redshift table
+        bucket_name = 'capstone--output'
+        folder_path = 'crime_scene_report/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY crime_scene_report FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("1")
+        folder_path = 'interview/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY interview FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("2")
+        folder_path = 'get_fit_now_check_in/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY get_fit_now_check_in FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("3")
+        folder_path = 'get_fit_now_member/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY get_fit_now_member FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("4")
+        folder_path = 'person/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY person FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("5")
+        folder_path = 'facebook_event_checkin'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY facebook_event_checkin FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("6")
+        folder_path = 'drivers_license/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY drivers_license FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("7")
+        folder_path = 'income/'
+        file_names = get_file_names(bucket_name, folder_path)
+        copy_query = f"COPY income FROM 's3://capstone--output/{file_names[0]}' IAM_ROLE 'arn:aws:iam::630256051499:role/service-role/AmazonRedshift-CommandsAccessRole-20240130T200959' CSV IGNOREHEADER 1;"
+        cursor.execute(copy_query)
+        print("Data loaded from S3 to Redshift")
+        conn.commit()
+        
+        ########
+        q = "SELECT * FROM crime_scene_report WHERE city = 'SQL City' AND type = 'murder'";
+        cursor.execute(q)
+        q = "SELECT * FROM person WHERE address_street_name = 'Northwestern Dr' ORDER BY address_number DESC LIMIT 1";
+        cursor.execute(q)
+        q = "SELECT * FROM person WHERE name LIKE '%Annabel%' AND address_street_name ='Franklin Ave'";
+        cursor.execute(q)
+        q = "SELECT * FROM interview where person_id = '14887' OR person_id = '16371'";
+        cursor.execute(q)
+        q = "SELECT * FROM get_fit_now_check_in WHERE membership_id like '%48Z%' AND check_in_date = '2018-01-09' order by check_in_date";
+        cursor.execute(q)
+        q = "SELECT * FROM drivers_license WHERE plate_number LIKE '%H42W%'";
+        cursor.execute(q)
+        q = "SELECT * FROM person WHERE license_id = 423327 OR license_id = 664760";
+        cursor.execute(q)
+        q = "SELECT * FROM get_fit_now_member WHERE person_id = 51739 or person_id = 67318";
+        cursor.execute(q)
+        q = "SELECT * FROM interview WHERE person_id = 67318";
+        cursor.execute(q)
+        
+        
+        insert_query = 'INSERT INTO solution (usr, value) VALUES (%s, %s)'
+        values = ('Jeremy Bowers', 'Murderer')
+        cursor.execute(insert_query, values)
+        conn.commit()
+        
+        
+        q = "SELECT * FROM drivers_license WHERE car_make = 'Tesla' AND car_model = 'Model S' AND gender = 'female' AND hair_colour = 'red'";
+        cursor.execute(q)
+        q = "SELECT * FROM person where license_id = 202298 OR license_id = 291182 OR license_id = 918773";
+        cursor.execute(q)
+        q = "SELECT * FROM facebook_event_checkin where person_id = 78881 OR person_id = 90700 OR person_id = 99716";
+        cursor.execute(q)
+        q = "SELECT * FROM person WHERE id = 99716";
+        
+        
+        insert_query = 'INSERT INTO solution (usr, value) VALUES (%s, %s)'
+        values = ('Miranda Priestly', 'Master Mind')
+        cursor.execute(insert_query, values)
+        conn.commit()
+        
+        
+        q = "select * from solution"
+        cursor.execute(q)
+        x = cursor.fetchall()
+        
+        for r in x:
+            print(r)
+        print("Working")
+    except Exception as e:
+        print("Error:", e)
+        conn.rollback()
+        
+        
+    finally:
+        # Close connection
+        if 'conn' in locals():
+            cursor.close()
+            conn.close()
