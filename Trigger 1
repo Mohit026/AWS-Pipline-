@@ -1,0 +1,25 @@
+import boto3
+import pandas as pd
+
+def lambda_handler(event, context):
+    # Extract S3 bucket and key from the event
+    s3_bucket = event['Records'][0]['s3']['bucket']['name']
+    s3_key = event['Records'][0]['s3']['object']['key']
+    
+    # Initialize Boto3 clients
+    s3_client = boto3.client('s3')
+    glue_client = boto3.client('glue')
+    
+    # Further processing logic here
+    glue_job_name = 'murder'
+
+    # Trigger the Glue job
+    response = glue_client.start_job_run(JobName=glue_job_name)
+
+    
+    # Optionally handle response or errors from Glue
+    
+    return {
+        'statusCode': 200,
+        'body': 'Glue job triggered successfully'
+    }
