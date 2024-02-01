@@ -1,0 +1,129 @@
+import sys
+import re
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+import numpy as np
+import datetime as dt
+## @params: [JOB_NAME]
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+job.commit()
+
+
+import sqlite3 as sql
+import pandas as pd
+import boto3
+from io import StringIO
+from botocore.exceptions import NoCredentialsError
+
+# AWS credentials and S3 details
+aws_access_key = 'AKIAZFPRQEUVXG5XBIOJ'
+aws_secret_key = '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'
+s3_bucket_name_input = 'capstone--input'
+s3_file_key_input = 'sql-murder-mystery.db'
+
+# Local path to download the SQLite database file
+local_database_path = 'C:\\Users\\sql-murder-mystery.db'
+
+# Create an S3 client
+s3 = boto3.client('s3', aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
+
+# Download the SQLite database file from S3
+try:
+    s3.download_file(s3_bucket_name_input, s3_file_key_input, local_database_path)
+    print("SQLite database downloaded successfully.")
+except NoCredentialsError:
+    print("Credentials not available.")
+
+# Create a connection to SQLite
+connection = sql.connect(local_database_path)
+cursor = connection.cursor()
+
+# Query to get table names from sqlite_master
+table_query = "SELECT name FROM sqlite_master WHERE type='table';"
+# Execute the query
+cursor.execute(table_query)
+
+# Fetch all table names
+table_names = cursor.fetchall()
+print(table_names)
+
+# Loop through tables and retrieve content
+for name in table_names:
+
+    # Query to select all rows from the specified table
+    query = f"SELECT * FROM {name[0]};"
+    df = pd.read_sql_query(query, connection)
+    def remove_special_characters(input_string):
+        return re.sub(r'[^a-zA-Z0-9\s]', '', input_string)
+    if(name[0]=="crime_scene_report"):
+        df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
+        df['date'] = df['date'].dt.date
+        df['description'] = df['description'].str.replace('\n','')
+        df['description'] = df['description'].apply(lambda x: remove_special_characters(x))
+        df['description'] = df['description'].str.replace('\s+', ' ')# Remove extra spaces
+        df['description'] = df['description'].replace('', np.nan)
+        df.dropna(inplace = True)
+    if(name[0]=="facebook_event_checkin"):
+        df['event_name'] = df['event_name'].str.replace('\n','')
+        df['event_name'] = df['event_name'].apply(lambda x: remove_special_characters(x))
+        df['event_name'] = df['event_name'].str.replace('\s+', ' ')# Remove extra spaces
+        df['event_name'] = df['event_name'].replace('', np.nan)
+        df.dropna(inplace = True)
+        df['date']= pd.to_datetime(df['date'], format='%Y%m%d')
+        df['date'] = df['date'].dt.date
+    if(name[0]=="get_fit_now_member"):
+        df['membership_start_date'] = pd.to_datetime(df['membership_start_date'], format='%Y%m%d')
+        df['membership_start_date'] = df['membership_start_date'].dt.date
+        df.dropna(inplace = True)
+    if(name[0]=="interview"):
+        df['transcript'] = df['transcript'].str.replace('\n','')
+        df['transcript'] = df['transcript'].apply(lambda x: remove_special_characters(x))
+        df['transcript'] = df['transcript'].str.replace('\s+', ' ')# Remove extra spaces
+        df['transcript'] = df['transcript'].replace('', np.nan)
+        df.dropna(inplace = True)
+    if(name[0]=="get_fit_now_check_in"):
+        def func(a):
+            m = a % 100
+            h = a // 100
+            if m >= 60:
+                m = m - 60
+                h = h + 1
+            return f"{h:02d}:{m:02d}:00"  # Convert to a string in 'HH:MM:SS' format
+        df['check_in_time'] = df['check_in_time'].apply(func)
+        df['check_out_time'] = df['check_out_time'].apply(func)
+        df['check_in_date']= pd.to_datetime(df['check_in_date'],format='%Y%m%d')
+        df['check_in_date']=df['check_in_date'].dt.date
+        df.dropna(inplace = True)
+    if not df.empty:
+        locals()[name[0]] = spark.createDataFrame(df)
+cursor.close()
+connection.close()
+crime_scene_report.coalesce(1).write.option("header",True).csv(r's3://capstone--output/crime_scene_report')
+get_fit_now_check_in.coalesce(1).write.option("header",True).csv(r's3://capstone--output/get_fit_now_check_in')
+get_fit_now_member.coalesce(1).write.option("header",True).csv(r's3://capstone--output/get_fit_now_member')
+person.coalesce(1).write.option("header",True).csv(r's3://capstone--output/person')
+drivers_license.coalesce(1).write.option("header",True).csv(r's3://capstone--output/drivers_license')
+interview.coalesce(1).write.option("header",True).csv(r's3://capstone--output/interview')
+income.coalesce(1).write.option("header",True).csv(r's3://capstone--output/income')
+facebook_event_checkin.coalesce(1).write.option("header",True).csv(r's3://capstone--output/facebook_event_checkin')
+#get_fit_now_check_in.coalesce(1).write.option("header",True).csv(r's3://capstone--output/output')
+schema = StructType([
+    StructField("user", StringType(), True),
+    StructField("value", StringType(), True)
+])
+
+# Create an empty DataFrame with the specified schema
+solution = spark.createDataFrame([], schema=schema)
+solution.coalesce(1).write.option("header",True).csv(r's3://capstone--output/solution')
+print("CSV files uploaded to S3 successfully.")
