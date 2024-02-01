@@ -27,8 +27,8 @@ from io import StringIO
 from botocore.exceptions import NoCredentialsError
 
 # AWS credentials and S3 details
-aws_access_key = 'AKIAZFPRQEUVXG5XBIOJ'
-aws_secret_key = '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'
+aws_access_key = '************'
+aws_secret_key = '*************'
 s3_bucket_name_input = 'capstone--input'
 s3_file_key_input = 'sql-murder-mystery.db'
 
